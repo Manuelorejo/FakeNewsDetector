@@ -1,4 +1,5 @@
 streamlit
 requests
 joblib
+scikit-learn
 numpy
