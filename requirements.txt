@@ -3,3 +3,6 @@ requests
 joblib
 scikit-learn
 numpy
+beautifulsoup4
+urllib3
+
