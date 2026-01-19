@@ -58,6 +58,3 @@ def scrape_instablog_article(url: str) -> Tuple[str, str]:
             "title": title,
             "text": article_text,
         }
-
-
-scrape_instablog_article("https://instablog9ja.com/2026/01/05/itel-partners-with-pantone-to-launch-2026-color-of-the-year-collection-in-nigeria/")

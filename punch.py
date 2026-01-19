@@ -63,4 +63,3 @@ def scrape_punch_article(url: str) -> Tuple[str, str]:
             "title": title,
             "text": article_text,
         }
-scrape_punch_article("https://punchng.com/video-we-have-the-same-spec-adeleke-jokes-about-sons-choice-of-bride/")

@@ -54,5 +54,3 @@ def scrape_onion_article(url: str) -> Tuple[str, str]:
             "title": title,
             "text": article_text,
         }
-
-scrape_onion_article("https://theonion.com/gop-adds-ice-kills-everyone-pillar-to-2026-platform/")

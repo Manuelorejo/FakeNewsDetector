@@ -61,5 +61,3 @@ def scrape_bbc_article(url: str) -> Tuple[str, str]:
             "title": title,
             "text": article_text,
         }
-
-scrape_bbc_article("https://www.bbc.com/news/articles/cqj2qgw8w08o")

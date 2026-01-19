@@ -61,4 +61,3 @@ def scrape_pulse_article(url: str) -> Tuple[str, str]:
 
 
 
-scrape_pulse_article("https://www.pulse.ng/story/davido-chris-brown-album-2026011214572678644")
