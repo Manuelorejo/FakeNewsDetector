@@ -1,47 +1,56 @@
+# -*- coding: utf-8 -*-
+"""
+Main Fake News Detector Page
+Locked until login
+"""
+
 import streamlit as st
 import requests
 import joblib
 import numpy as np
 from urllib.parse import urlparse
-import os
+import plotly.graph_objects as go
+import sqlite3
+from datetime import datetime
+from db import add_history
+from db import init_db
 
-# ─────────────────────────────────────────────
+
+init_db()
+# ------------------------------
+# LOCK PAGE UNTIL LOGIN
+# ------------------------------
+if "user_id" not in st.session_state or st.session_state.user_id is None:
+    st.warning("⚠️ Please log in first.")
+    st.switch_page("pages/login.py")
+
+st.title("📰 Fake News Detector")
+st.success(f"✅ Welcome! You are now logged in.")
+
+
+# ------------------------------
 # IMPORT SCRAPERS
-# ─────────────────────────────────────────────
+# ------------------------------
 from bbc import scrape_bbc_article
-from instablog import scrape_instablog_article
-from onion import scrape_onion_article
 from pulse_ng import scrape_pulse_article
 from punch import scrape_punch_article
+from instablog import scrape_instablog_article
+from onion import scrape_onion_article
+from fox import scrape_fox_article
 
-# ─────────────────────────────────────────────
-# PAGE CONFIG
-# ─────────────────────────────────────────────
-st.set_page_config(page_title="Fake News Detector", layout="wide")
-st.title("📰 Fake News Detection Platform")
+SCRAPER_MAP = {
+    "bbc.com": scrape_bbc_article,
+    "www.pulse.ng": scrape_pulse_article,
+    "pulse.ng": scrape_pulse_article,
+    "punchng.com": scrape_punch_article,
+    "instablog9ja.com": scrape_instablog_article,
+    "theonion.com": scrape_onion_article,
+    "foxnews.com": scrape_fox_article
+}
 
-# ─────────────────────────────────────────────
-# GOOGLE FACT CHECK API
-# ─────────────────────────────────────────────
-API_KEY = os.getenv("GOOGLE_API_KEY", "")
-API_URL = "https://factchecktools.googleapis.com/v1alpha1/claims:search"
-
-def google_fact_check(query, max_results=3):
-    if not API_KEY:
-        return []
-    try:
-        res = requests.get(
-            API_URL,
-            params={"query": query, "key": API_KEY, "pageSize": max_results},
-            timeout=10
-        )
-        return res.json().get("claims", []) if res.status_code == 200 else []
-    except Exception:
-        return []
-
-# ─────────────────────────────────────────────
+# ------------------------------
 # LOAD MODELS
-# ─────────────────────────────────────────────
+# ------------------------------
 @st.cache_resource
 def load_models():
     return (
@@ -53,145 +62,183 @@ def load_models():
 
 model, vectorizer, satire_model, satire_vectorizer = load_models()
 
-# ─────────────────────────────────────────────
-# SOURCE WEIGHTS / SATIRE BOOST
-# ─────────────────────────────────────────────
-SOURCE_WEIGHTS = {
-    "bbc.com":          {"name": "BBC News",      "credibility": 0.04,  "satire_bias": 0.0},
-    "pulse.ng":         {"name": "Pulse NG",      "credibility": 0.02,  "satire_bias": 0.0},
-    "www.pulse.ng":     {"name": "Pulse NG",      "credibility": 0.02,  "satire_bias": 0.0},
-    "punchng.com":      {"name": "Punch Nigeria", "credibility": 0.01,  "satire_bias": 0.0},
-    "instablog9ja.com": {"name": "Instablog9ja",  "credibility": -0.02, "satire_bias": 0.0},
-    "theonion.com":     {"name": "The Onion",     "credibility": 0.0,   "satire_bias": 0.30},
-}
+SATIRE_HIGH = 0.70
+SATIRE_LOW = 0.40
+FAKE_HIGH = 0.75
+FAKE_UNCERTAIN = 0.55
 
-# ─────────────────────────────────────────────
-# SCRAPER ROUTER
-# ─────────────────────────────────────────────
-def scrape_article_from_url(url):
-    domain = urlparse(url).netloc.lower()
-    scraper_map = {
-        "bbc.com": scrape_bbc_article,
-        "instablog9ja.com": scrape_instablog_article,
-        "theonion.com": scrape_onion_article,
-        "pulse.ng": scrape_pulse_article,
-        "www.pulse.ng": scrape_pulse_article,
-        "punchng.com": scrape_punch_article,
-    }
-
-    for key, scraper in scraper_map.items():
-        if key in domain:
-            try:
-                data = scraper(url)
-                # Convert tuple to dict if needed
-                if isinstance(data, tuple):
-                    data = {"title": data[0], "text": data[1]}
-                data["source_name"] = SOURCE_WEIGHTS[key]["name"]
-                return data
-            except Exception as e:
-                raise RuntimeError(f"Scraper failed: {e}")
-
-    raise ValueError(
-        "Unsupported news source. Only BBC, Pulse NG, Punch, Instablog9ja, and The Onion are supported."
-    )
-
-# ─────────────────────────────────────────────
-# MODEL FUNCTIONS
-# ─────────────────────────────────────────────
-def predict_fake_prob(title, text, source_domain=None):
-    combined = f"{title}. {text}"
-    X = vectorizer.transform([combined])
-    base_prob = model.predict_proba(X)[0][1]
-    bias = SOURCE_WEIGHTS.get(source_domain, {}).get("credibility", 0.0)
-    adjusted_prob = min(max(base_prob - bias, 0.0), 1.0)
-    return adjusted_prob
-
-def predict_satire_prob(title, text, source_domain=None):
-    combined = f"{title}. {text}"
-    X = satire_vectorizer.transform([combined])
+# ------------------------------
+# UTILITY FUNCTIONS
+# ------------------------------
+def predict_satire_prob(title, text):
+    X = satire_vectorizer.transform([f"{title}. {text}"])
     if hasattr(satire_model, "predict_proba"):
-        base_prob = satire_model.predict_proba(X)[0][1]
+        return satire_model.predict_proba(X)[0][1]
     else:
-        base_prob = 1 / (1 + np.exp(-satire_model.decision_function(X)[0]))
-    boost = SOURCE_WEIGHTS.get(source_domain, {}).get("satire_bias", 0.0)
-    adjusted_prob = min(base_prob + boost * (1 - base_prob), 1.0)
-    return adjusted_prob
+        score = satire_model.decision_function(X)[0]
+        return 1 / (1 + np.exp(-score))
 
-def explain_prediction(text):
-    features = vectorizer.get_feature_names_out()
-    tfidf = vectorizer.transform([text]).toarray()[0]
-    top = np.argsort(tfidf)[-6:][::-1]
-    return [features[i] for i in top if tfidf[i] > 0]
+def predict_fake_prob(title, text):
+    X = vectorizer.transform([f"{title}. {text}"])
+    return model.predict_proba(X)[0][1]
 
-def confidence_bar(prob, label="Confidence"):
-    color = "#dc3545" if prob > 0.7 else "#ffc107" if prob > 0.4 else "#28a745"
+def plot_probability_pie(satire_prob, fake_prob):
+    credible_prob = max(0, 1 - satire_prob - fake_prob)
+    labels = ["Satire", "Fake", "Credible"]
+    values = [satire_prob, fake_prob, credible_prob]
+    colors = ["#FF6B6B","#FFCA3A","#4CAF50"]
+    fig = go.Figure(data=[go.Pie(labels=labels, values=values, hole=0.3, marker_colors=colors)])
+    fig.update_layout(showlegend=True, margin=dict(t=0,b=0,l=0,r=0))
+    st.plotly_chart(fig, use_container_width=True)
+
+def timeline_step(title, status, description=""):
+    colors = {"pass":"#28a745","warn":"#ffc107","fail":"#dc3545","pending":"#6c757d"}
     st.markdown(f"""
-        <div style="background-color: #e9ecef; border-radius: 8px; height: 24px; overflow: hidden; margin: 10px 0;">
-            <div style="background-color: {color}; width: {prob*100}%; height: 100%; transition: width 0.8s ease;"></div>
+        <div style='padding:15px 20px;border-left:6px solid {colors.get(status,"#aaa")};margin-bottom:10px;border-radius:6px;background-color:#f8f9fa;'>
+            <strong>{title}</strong><br>{description}
         </div>
-        <p style="text-align: center; color: #555; margin-top: -5px;">{label}: {prob:.2%}</p>
     """, unsafe_allow_html=True)
 
-# ─────────────────────────────────────────────
-# UI LAYOUT
-# ─────────────────────────────────────────────
-url_input = st.text_input("Optional: Paste a news article URL")
-title_input = st.text_input("News Headline")
-text_input = st.text_area("News Article Text", height=260)
-source_display = st.empty()
+# ------------------------------
+# SQLITE HISTORY FUNCTIONS
+# ------------------------------
+DB_PATH = "app_data.db"
 
-if st.button("🔍 Analyze"):
-    source_domain = None
+def init_db():
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT NOT NULL,
+            url TEXT,
+            title TEXT NOT NULL,
+            verdict TEXT NOT NULL,
+            satire_prob REAL,
+            fake_prob REAL,
+            timestamp TEXT NOT NULL
+        )
+    """)
+    conn.commit()
+    conn.close()
 
-    # --- URL SCRAPING ---
+def save_to_history(user_id, url, title, verdict, satire_prob, fake_prob):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("""
+        INSERT INTO history (user_id, url, title, verdict, satire_prob, fake_prob, timestamp)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    """, (user_id, url, title, verdict, satire_prob, fake_prob, datetime.utcnow().isoformat()))
+    conn.commit()
+    conn.close()
+
+init_db()
+
+# ------------------------------
+# MAIN INPUT & SCRAPER STATUS
+# ------------------------------
+col1, col2 = st.columns([2, 1])
+
+with col1:
+    url_input = st.text_input("Article URL", placeholder="Paste article URL here...")
+    title_input = st.text_input("Headline (manual input)")
+    text_input = st.text_area("Article text (manual input)", height=200)
+
+with col2:
+    scraper_status_placeholder = st.empty()  # Right-side feedback box
+
+# ------------------------------
+# ANALYZE BUTTON
+# ------------------------------
+if st.button("Analyze"):
+    article_title = title_input.strip()
+    article_text = text_input.strip()
+
+    # --- Scrape if URL provided ---
     if url_input.strip():
+        domain = urlparse(url_input).netloc.replace("www.","")
+        scraper = SCRAPER_MAP.get(domain)
+
+        if not scraper:
+            scraper_status_placeholder.error("❌ Website not supported for scraping.")
+            st.stop()
+
         try:
-            article = scrape_article_from_url(url_input)
-            title_input = article["title"]
-            text_input = article["text"]
-            source_display.caption(f"Detected source: {article.get('source_name', 'Unknown')}")
-            source_domain = urlparse(url_input).netloc.lower()
-        except ValueError as e:
-            st.warning(str(e))
+            with st.spinner("🔍 Scraping article..."):
+                data = scraper(url_input)
+            article_title = data.get("title", article_title)
+            article_text = data.get("text", article_text)
+
+            scraper_status_placeholder.success(f"✅ Article detected!\n\n*{article_title}*")
+
         except Exception as e:
-            st.error("Failed to scrape article.")
-            st.caption(f"Error details: {e}")
-
-    # --- VALIDATE INPUT ---
-    if not title_input.strip() or not text_input.strip():
-        st.warning("Please provide a headline and article text.")
-        st.stop()
-
-    # --- FACT CHECK ---
-    claims = google_fact_check(title_input)
-    if claims:
-        st.error("This claim has already been fact-checked.")
-        st.stop()
-
-    # --- PREDICTIONS ---
-    satire_prob = predict_satire_prob(title_input, text_input, source_domain)
-    fake_prob = predict_fake_prob(title_input, text_input, source_domain)
-
-    # --- VERDICT LOGIC ---
-    if satire_prob > 0.7:
-        verdict = "Satire"
-    elif fake_prob > 0.75:
-        verdict = "Likely Misinformation"
-    elif fake_prob > 0.55:
-        verdict = "Unverified"
+            scraper_status_placeholder.error(f"❌ Scraping failed: {e}")
+            st.stop()
     else:
-        verdict = "Likely Credible"
+        scraper_status_placeholder.info("ℹ️ No URL provided. Using manual input.")
 
-    st.markdown(f"## 🧠 Verdict: **{verdict}**")
+    if not article_title and not article_text:
+        st.warning("Please provide headline or article text.")
+        st.stop()
 
-    # --- CONFIDENCE BARS ---
-    confidence_bar(fake_prob, "Misinformation Probability")
-    confidence_bar(satire_prob, "Satire Probability")
+    # ------------------------------
+    # ANALYSIS WORKFLOW
+    # ------------------------------
+    st.markdown("## 🧭 Analysis Timeline")
+    verdict = None
+    satire_warn = False
 
-    # --- MODEL EXPLAINABILITY ---
-    with st.expander("🔎 Model Explanation"):
-        st.markdown(f"**Fake news probability:** {fake_prob:.2%}")
-        st.markdown(f"**Satire probability:** {satire_prob:.2%}")
-        st.markdown("**Top influencing words:**")
-        for word in explain_prediction(text_input):
-            st.markdown(f"- `{word}`")
+    # -------- Satire Detection --------
+    satire_prob = predict_satire_prob(article_title, article_text)
+    if url_input.strip() and "theonion.com" in url_input:
+        satire_prob = min(1.0, satire_prob + 0.6)
+
+    if satire_prob >= SATIRE_HIGH:
+        timeline_step("Satire Detection", "fail", f"High satire detected ({satire_prob:.2%})")
+        verdict = "satire"
+    elif SATIRE_LOW <= satire_prob < SATIRE_HIGH:
+        timeline_step("Satire Detection", "warn", f"Moderate satire ({satire_prob:.2%})")
+        satire_warn = True
+    else:
+        timeline_step("Satire Detection", "pass", f"Low satire ({satire_prob:.2%})")
+
+    # -------- Credibility --------
+    fake_prob = predict_fake_prob(article_title, article_text)
+    final_fake_prob = fake_prob
+    if url_input.strip() and "theonion.com" in url_input:
+        final_fake_prob = max(0, fake_prob - 0.2)
+
+    if verdict is None:
+        if final_fake_prob >= FAKE_HIGH:
+            timeline_step("Credibility", "fail", f"High likelihood of misinformation ({final_fake_prob:.2%})")
+            verdict = "fake"
+        elif FAKE_UNCERTAIN <= final_fake_prob < FAKE_HIGH:
+            timeline_step("Credibility", "warn", f"Inconclusive result ({final_fake_prob:.2%})")
+            verdict = "unverified"
+        else:
+            timeline_step("Credibility", "pass", f"Likely credible ({1-final_fake_prob:.2%})")
+            verdict = "real"
+
+    # -------- Pie Chart Explainability --------
+    st.markdown("## 📊 Model Explainability")
+    plot_probability_pie(satire_prob, final_fake_prob)
+
+    # -------- Final Verdict --------
+    verdict_text = {
+        "satire":"Likely Satirical",
+        "fake":"Likely Misinformation",
+        "unverified":"Unverified",
+        "real":"Likely Credible"
+    }
+    verdict_colors = {
+        "satire":"#FF6B6B","fake":"#DC3545","unverified":"#FFC107","real":"#4CAF50"
+    }
+    st.markdown(f"<div style='padding:20px;border-radius:16px;background-color:{verdict_colors.get(verdict,'#EEE')};font-weight:bold;text-align:center;'>{verdict_text.get(verdict,'Unknown')}</div>", unsafe_allow_html=True)
+
+    if satire_warn and verdict != "satire":
+        st.info("⚠️ Moderate satirical elements detected — content may include exaggeration or humor.")
+
+    # -------- Save to history --------
+   
+    
+    add_history(st.session_state.user_id, url_input, article_title, verdict, satire_prob, final_fake_prob)
