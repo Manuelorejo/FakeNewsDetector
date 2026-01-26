@@ -20,6 +20,19 @@ init_db()
 # ------------------------------
 # LOCK PAGE UNTIL LOGIN
 # ------------------------------
+
+def logout():
+    st.session_state.user_id = None
+    st.session_state.username = None
+    st.success("You have been logged out.")
+    st.switch_page("pages/login.py")
+
+with st.sidebar:
+    st.markdown("### 👤 Account")
+    st.write(f"Logged in as **{st.session_state.get('username','')}**")
+    if st.button("🚪 Log out"):
+        logout()
+        
 if "user_id" not in st.session_state or st.session_state.user_id is None:
     st.warning("⚠️ Please log in first.")
     st.switch_page("pages/login.py")
@@ -242,3 +255,4 @@ if st.button("Analyze"):
    
     
     add_history(st.session_state.user_id, url_input, article_title, verdict, satire_prob, final_fake_prob)
+
