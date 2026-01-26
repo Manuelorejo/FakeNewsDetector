@@ -3,19 +3,19 @@ from bs4 import BeautifulSoup
 from typing import Tuple
 
 
-def scrape_onion_article(url: str) -> Tuple[str, str]:
+def scrape_bbc_article(url: str) -> Tuple[str, str]:
     """
-    Scrapes a The Onion article and returns the title and main text.
+    Scrapes a BBC News article and returns the title and main text.
 
     Args:
-        url (str): URL of the The Onion article
+        url (str): URL of the BBC News article
 
     Returns:
         Tuple[str, str]: (title, article_text)
 
     Raises:
-        ValueError: If the page structure is not as expected
-        requests.RequestException: If the request fails
+        ValueError: If expected article structure isn't found
+        requests.RequestException: If the HTTP request fails
     """
 
     headers = {
@@ -37,18 +37,25 @@ def scrape_onion_article(url: str) -> Tuple[str, str]:
     # ---- Extract title ----
     title_tag = soup.find("h1")
     if not title_tag:
-        raise ValueError("Article title not found")
+        raise ValueError("Title not found on BBC article")
 
     title = title_tag.get_text(strip=True)
 
     # ---- Extract article body ----
-    paragraphs = soup.select("div.entry-content p")
-    if not paragraphs:
-        raise ValueError("Article paragraphs not found")
+    # BBC articles typically put paragraphs inside <article> or a div with "ssrcss-*" classes
+    article_body = soup.find("article")
+    if not article_body:
+        # fallback: look for divs that contain paragraphs
+        article_body = soup.find("div", {"data-component": "text-block"})
 
-    article_text = "\n\n".join(
-        p.get_text(strip=True) for p in paragraphs
-    )
+    if not article_body:
+        raise ValueError("Could not locate the article content")
+
+    paragraphs = article_body.find_all("p")
+    if not paragraphs:
+        raise ValueError("No article paragraphs found")
+
+    article_text = "\n\n".join(p.get_text(strip=True) for p in paragraphs)
 
     return {
             "title": title,

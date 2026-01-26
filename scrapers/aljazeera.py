@@ -1,23 +1,21 @@
 import requests
 from bs4 import BeautifulSoup
-from typing import Tuple
+from typing import Dict
 
-
-def scrape_onion_article(url: str) -> Tuple[str, str]:
+def scrape_aljazeera_article(url: str) -> Dict[str, str]:
     """
-    Scrapes a The Onion article and returns the title and main text.
+    Scrapes an Al Jazeera article and returns the title and main text.
 
     Args:
-        url (str): URL of the The Onion article
+        url (str): URL of the Al Jazeera article
 
     Returns:
-        Tuple[str, str]: (title, article_text)
+        Dict[str, str]: {"title": ..., "text": ...}
 
     Raises:
-        ValueError: If the page structure is not as expected
+        ValueError: If expected content is not found
         requests.RequestException: If the request fails
     """
-
     headers = {
         "User-Agent": (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -38,19 +36,23 @@ def scrape_onion_article(url: str) -> Tuple[str, str]:
     title_tag = soup.find("h1")
     if not title_tag:
         raise ValueError("Article title not found")
-
     title = title_tag.get_text(strip=True)
 
     # ---- Extract article body ----
-    paragraphs = soup.select("div.entry-content p")
-    if not paragraphs:
-        raise ValueError("Article paragraphs not found")
-
-    article_text = "\n\n".join(
-        p.get_text(strip=True) for p in paragraphs
+    article_container = (
+        soup.find("div", class_="wysiwyg") or 
+        soup.find("article") or 
+        soup.find("div", {"data-testid": "article-body"})
     )
 
-    return {
-            "title": title,
-            "text": article_text,
-        }
+    if not article_container:
+        raise ValueError("Article content container not found")
+
+    paragraphs = article_container.find_all("p")
+    if not paragraphs:
+        raise ValueError("No article paragraphs found")
+
+    article_text = "\n\n".join(p.get_text(strip=True) for p in paragraphs)
+
+    return {"title": title, "text": article_text}
+

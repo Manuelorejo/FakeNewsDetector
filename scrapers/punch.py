@@ -1,21 +1,27 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Wed Jan 14 12:27:40 2026
+
+@author: Oreoluwa
+"""
+
 import requests
 from bs4 import BeautifulSoup
 from typing import Tuple
 
-
-def scrape_onion_article(url: str) -> Tuple[str, str]:
+def scrape_punch_article(url: str) -> Tuple[str, str]:
     """
-    Scrapes a The Onion article and returns the title and main text.
+    Scrapes a PunchNG article and returns the title and main text.
 
     Args:
-        url (str): URL of the The Onion article
+        url (str): URL of the Punch article
 
     Returns:
         Tuple[str, str]: (title, article_text)
 
     Raises:
-        ValueError: If the page structure is not as expected
-        requests.RequestException: If the request fails
+        ValueError: If article structure isn't found
+        requests.RequestException: If network request fails
     """
 
     headers = {
@@ -34,20 +40,23 @@ def scrape_onion_article(url: str) -> Tuple[str, str]:
 
     soup = BeautifulSoup(response.text, "html.parser")
 
-    # ---- Extract title ----
+    # ---- Extract the title ----
     title_tag = soup.find("h1")
     if not title_tag:
-        raise ValueError("Article title not found")
+        raise ValueError("Article title not found on PunchNG")
 
     title = title_tag.get_text(strip=True)
 
-    # ---- Extract article body ----
-    paragraphs = soup.select("div.entry-content p")
-    if not paragraphs:
-        raise ValueError("Article paragraphs not found")
+    # ---- Extract article body paragraphs ----
+    # From the page HTML the content follows a structure of multiple <p> tags
+    # directly under the article container
+    article_paragraphs = soup.select("article p") or soup.find_all("p")
+
+    if not article_paragraphs:
+        raise ValueError("Article body paragraphs not found on PunchNG")
 
     article_text = "\n\n".join(
-        p.get_text(strip=True) for p in paragraphs
+        p.get_text(strip=True) for p in article_paragraphs
     )
 
     return {

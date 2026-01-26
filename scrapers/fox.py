@@ -1,17 +1,17 @@
 import requests
 from bs4 import BeautifulSoup
-from typing import Tuple
+from typing import Dict
 
 
-def scrape_onion_article(url: str) -> Tuple[str, str]:
+def scrape_fox_article(url: str) -> Dict[str, str]:
     """
-    Scrapes a The Onion article and returns the title and main text.
+    Scrapes a Fox News article and returns the title and main text.
 
     Args:
-        url (str): URL of the The Onion article
+        url (str): URL of the Fox News article
 
     Returns:
-        Tuple[str, str]: (title, article_text)
+        Dict[str, str]: {"title": article_title, "text": article_text}
 
     Raises:
         ValueError: If the page structure is not as expected
@@ -42,15 +42,21 @@ def scrape_onion_article(url: str) -> Tuple[str, str]:
     title = title_tag.get_text(strip=True)
 
     # ---- Extract article body ----
-    paragraphs = soup.select("div.entry-content p")
-    if not paragraphs:
-        raise ValueError("Article paragraphs not found")
+    # Fox News articles often store paragraphs under <div class="article-body"> inside <p> tags
+    article_container = soup.find("div", class_="article-body")
+    if not article_container:
+        raise ValueError("Article content container not found")
 
-    article_text = "\n\n".join(
-        p.get_text(strip=True) for p in paragraphs
-    )
+    paragraphs = article_container.find_all("p")
+    if not paragraphs:
+        raise ValueError("No article paragraphs found")
+
+    article_text = "\n\n".join(p.get_text(strip=True) for p in paragraphs)
 
     return {
-            "title": title,
-            "text": article_text,
-        }
+        "title": title,
+        "text": article_text,
+    }
+
+
+
