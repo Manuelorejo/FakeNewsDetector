@@ -28,6 +28,7 @@ if st.button("Login"):
 st.markdown(
     """
     Don't have an account?  
-    👉 [Sign up here](register.py)
+    👉 [Sign up here](pages/register.py)
     """
 )
+
