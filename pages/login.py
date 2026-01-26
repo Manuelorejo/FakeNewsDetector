@@ -29,6 +29,6 @@ st.markdown("Don't have an account?")
 
 if st.button("👉 Sign up here"):
     st.switch_page("pages/register.py")
-)
+
 
 
