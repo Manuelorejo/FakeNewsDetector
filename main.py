@@ -20,19 +20,6 @@ init_db()
 # ------------------------------
 # LOCK PAGE UNTIL LOGIN
 # ------------------------------
-
-def logout():
-    st.session_state.user_id = None
-    st.session_state.username = None
-    st.success("You have been logged out.")
-    st.switch_page("pages/login.py")
-
-with st.sidebar:
-    st.markdown("### 👤 Account")
-    st.write(f"Logged in as **{st.session_state.get('username','')}**")
-    if st.button("🚪 Log out"):
-        logout()
-        
 if "user_id" not in st.session_state or st.session_state.user_id is None:
     st.warning("⚠️ Please log in first.")
     st.switch_page("pages/login.py")
@@ -44,12 +31,16 @@ st.success(f"✅ Welcome! You are now logged in.")
 # ------------------------------
 # IMPORT SCRAPERS
 # ------------------------------
-from bbc import scrape_bbc_article
-from pulse_ng import scrape_pulse_article
-from punch import scrape_punch_article
-from instablog import scrape_instablog_article
-from onion import scrape_onion_article
-from fox import scrape_fox_article
+from scrapers.bbc import scrape_bbc_article
+from scrapers.pulse_ng import scrape_pulse_article
+from scrapers.punch import scrape_punch_article
+from scrapers.instablog import scrape_instablog_article
+from scrapers.onion import scrape_onion_article
+from scrapers.fox import scrape_fox_article
+from scrapers.aljazeera import scrape_aljazeera_article
+from scrapers.arise import scrape_arise_tv_article
+from scrapers.channels import scrape_channelstv_article
+from scrapers.sahara import scrape_saharareporters_article
 
 SCRAPER_MAP = {
     "bbc.com": scrape_bbc_article,
@@ -58,7 +49,11 @@ SCRAPER_MAP = {
     "punchng.com": scrape_punch_article,
     "instablog9ja.com": scrape_instablog_article,
     "theonion.com": scrape_onion_article,
-    "foxnews.com": scrape_fox_article
+    "foxnews.com": scrape_fox_article,
+    "arise.tv": scrape_arise_tv_article,
+    "saharareporters.com": scrape_saharareporters_article,
+    "channelstv.com": scrape_channelstv_article,
+    "aljazeera.com": scrape_aljazeera_article
 }
 
 # ------------------------------
@@ -255,4 +250,3 @@ if st.button("Analyze"):
    
     
     add_history(st.session_state.user_id, url_input, article_title, verdict, satire_prob, final_fake_prob)
-
