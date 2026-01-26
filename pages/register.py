@@ -18,8 +18,9 @@ if st.button("Sign Up"):
         success = add_user(username, password)
         if success:
             st.success("✅ Account created! Redirecting to login...")
-            st.switch_page("login.py")
+            st.switch_page("pages/login.py")
 
 
         else:
             st.error("❌ Username already exists. Pick another.")
+
