@@ -5,6 +5,18 @@ from datetime import datetime
 # ------------------------------
 # LOCK PAGE UNTIL LOGIN
 # ------------------------------
+def logout():
+    st.session_state.user_id = None
+    st.session_state.username = None
+    st.success("You have been logged out.")
+    st.switch_page("pages/login.py")
+
+with st.sidebar:
+    st.markdown("### 👤 Account")
+    st.write(f"Logged in as **{st.session_state.get('username','')}**")
+    if st.button("🚪 Log out"):
+        logout()
+        
 if "user_id" not in st.session_state or st.session_state.user_id is None:
     st.warning("⚠️ Please log in first! Go to the Login page.")
     st.stop()
@@ -39,3 +51,4 @@ else:
         st.markdown(f"- Fake Probability: {fake_prob:.0%}")
         st.markdown(f"- Analyzed at: {timestamp}")
         st.markdown("---")
+
