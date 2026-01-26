@@ -25,10 +25,10 @@ if st.button("Login"):
     else:
         st.error("❌ Invalid username or password")
 
-st.markdown(
-    """
-    Don't have an account?  
-    👉 [Sign up here](pages/register.py)
-    """
+st.markdown("Don't have an account?")
+
+if st.button("👉 Sign up here"):
+    st.switch_page("pages/register.py")
 )
+
 
