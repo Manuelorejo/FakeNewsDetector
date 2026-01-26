@@ -1,4 +1,5 @@
 import streamlit as st
+import time
 from db import add_user
 from db import init_db
 
@@ -18,9 +19,11 @@ if st.button("Sign Up"):
         success = add_user(username, password)
         if success:
             st.success("✅ Account created! Redirecting to login...")
+            time.sleep(3)
             st.switch_page("pages/login.py")
 
 
         else:
             st.error("❌ Username already exists. Pick another.")
+
 
